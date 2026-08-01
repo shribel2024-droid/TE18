@@ -1,0 +1,115 @@
+import sqlite3
+import csv
+import os
+
+class DatabaseManager:
+    def __init__(self, db_path="expenses.db"):
+        self.db_path = db_path
+        self.init_db()
+
+    def get_connection(self):
+        return sqlite3.connect(self.db_path)
+
+    def init_db(self):
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS expenses (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    title TEXT NOT NULL,
+                    amount REAL NOT NULL,
+                    category TEXT NOT NULL,
+                    date TEXT NOT NULL,
+                    notes TEXT
+                )
+            """)
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS settings (
+                    key TEXT PRIMARY KEY,
+                    value TEXT
+                )
+            """)
+            cursor.execute("INSERT OR IGNORE INTO settings (key, value) VALUES ('currency', '$')")
+            conn.commit()
+
+    def add_expense(self, title, amount, category, date, notes=""):
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "INSERT INTO expenses (title, amount, category, date, notes) VALUES (?, ?, ?, ?, ?)",
+                (title, float(amount), category, date, notes)
+            )
+            conn.commit()
+
+    def update_expense(self, expense_id, title, amount, category, date, notes=""):
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                UPDATE expenses 
+                SET title=?, amount=?, category=?, date=?, notes=?
+                WHERE id=?
+            """, (title, float(amount), category, date, notes, expense_id))
+            conn.commit()
+
+    def delete_expense(self, expense_id):
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM expenses WHERE id=?", (expense_id,))
+            conn.commit()
+
+    def get_expenses(self, category_filter="All", search_query=""):
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            query = "SELECT id, title, amount, category, date, notes FROM expenses WHERE 1=1"
+            params = []
+
+            if category_filter and category_filter != "All":
+                query += " AND category = ?"
+                params.append(category_filter)
+
+            if search_query:
+                query += " AND (title LIKE ? OR notes LIKE ?)"
+                params.extend([f"%{search_query}%", f"%{search_query}%"])
+
+            query += " ORDER BY date DESC, id DESC"
+            cursor.execute(query, params)
+            rows = cursor.fetchall()
+
+            return [
+                {
+                    "id": r[0],
+                    "title": r[1],
+                    "amount": f"{r[2]:.2f}",
+                    "category": r[3],
+                    "date": r[4],
+                    "notes": r[5] or ""
+                }
+                for r in rows
+            ]
+
+    def get_category_totals(self):
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT category, SUM(amount) FROM expenses GROUP BY category")
+            return dict(cursor.fetchall())
+
+    def get_setting(self, key, default=""):
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT value FROM settings WHERE key=?", (key,))
+            row = cursor.fetchone()
+            return row[0] if row else default
+
+    def set_setting(self, key, value):
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", (key, str(value)))
+            conn.commit()
+
+    def export_to_csv(self, file_path):
+        expenses = self.get_expenses()
+        with open(file_path, mode="w", newline="", encoding="utf-8") as file:
+            writer = csv.writer(file)
+            writer.writerow(["ID", "Title", "Amount", "Category", "Date", "Notes"])
+            for e in expenses:
+                writer.writerow([e["id"], e["title"], e["amount"], e["category"], e["date"], e["notes"]])
