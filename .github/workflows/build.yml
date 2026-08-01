@@ -26,7 +26,6 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      # Caching Buildozer dependencies to speed up subsequent builds
       - name: Cache Buildozer global directory
         uses: actions/cache@v4
         with:
@@ -68,6 +67,16 @@ jobs:
         run: |
           pip install --upgrade pip
           pip install buildozer cython==0.29.33
+
+      - name: Enable Auto-Accept SDK Licenses
+        run: |
+          mkdir -p ~/.android
+          touch ~/.android/repositories.cfg
+          if grep -q "android.accept_sdk_license" buildozer.spec; then
+            sed -i 's/.*android.accept_sdk_license.*/android.accept_sdk_license = True/' buildozer.spec
+          else
+            echo "android.accept_sdk_license = True" >> buildozer.spec
+          fi
 
       - name: Build APK with Buildozer
         run: |
