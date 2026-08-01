@@ -26,10 +26,23 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
+      # Caching Buildozer dependencies to speed up subsequent builds
+      - name: Cache Buildozer global directory
+        uses: actions/cache@v4
+        with:
+          path: ~/.buildozer
+          key: buildozer-global-${{ runner.os }}-${{ hashFiles('buildozer.spec') }}
+
+      - name: Cache Buildozer project directory
+        uses: actions/cache@v4
+        with:
+          path: .buildozer
+          key: buildozer-project-${{ runner.os }}-${{ hashFiles('buildozer.spec') }}
+
       - name: Install System Dependencies
         run: |
-          sudo apt-get update
-          sudo apt-get install -y \
+          sudo apt-get update -y || true
+          sudo apt-get install -y --no-install-recommends \
             build-essential \
             git \
             ffmpeg \
@@ -42,16 +55,14 @@ jobs:
             libavformat-dev \
             libavcodec-dev \
             zlib1g-dev \
-            libgstreamer1.0-dev \
-            gstreamer1.0-plugins-base \
-            gstreamer1.0-plugins-good \
             libsqlite3-dev \
             sqlite3 \
             zip \
             unzip \
             autoconf \
             libtool \
-            pkg-config
+            pkg-config \
+            ccache
 
       - name: Install Buildozer and Cython
         run: |
